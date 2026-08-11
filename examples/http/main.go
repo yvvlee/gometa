@@ -139,4 +139,33 @@ func main() {
 	fmt.Printf("parameter %d (%s): header %s\n", authorizationParameter.Index, authorizationParameter.Name, header.Name)
 	fmt.Printf("result %d (%s): body=%t\n", userResult.Index, userResult.Name, hasBody)
 	fmt.Printf("result %d (%s): failure=%t\n", errorResult.Index, errorResult.Name, hasFailure)
+
+	fmt.Println("metadata tree:")
+	gometa.Walk(metadata, func(declaration gometa.Declaration) bool {
+		switch declaration.Target {
+		case gometa.TargetType:
+			fmt.Printf("- type: %d annotations\n", len(declaration.Annotations()))
+		case gometa.TargetField:
+			fmt.Printf("- field %s: %d annotations\n", declaration.Name(), len(declaration.Annotations()))
+		case gometa.TargetMethod:
+			fmt.Printf("- method %s: %d annotations\n", declaration.Name(), len(declaration.Annotations()))
+		case gometa.TargetParameter, gometa.TargetResult:
+			index, _ := declaration.Index()
+			fmt.Printf(
+				"- %s %s[%d]: %d annotations\n",
+				declaration.Target,
+				declaration.Method.Name,
+				index,
+				len(declaration.Annotations()),
+			)
+		}
+		return true
+	})
+
+	annotationCount := 0
+	gometa.WalkAnnotations(metadata, func(_ gometa.Declaration, _ gometa.Annotation) bool {
+		annotationCount++
+		return true
+	})
+	fmt.Printf("annotations discovered: %d\n", annotationCount)
 }

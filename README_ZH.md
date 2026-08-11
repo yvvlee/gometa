@@ -13,6 +13,7 @@
 - 校验注解可以使用的目标。
 - 使用从零开始的下标标识参数和返回值。
 - 查询单个或多个同类型注解。
+- 无需预先知道声明名称，也能按稳定顺序遍历。
 - 运行时不使用反射，也不需要代码生成。
 - 静态校验元数据和 Go 声明的绑定关系。
 
@@ -201,6 +202,82 @@ body, found := gometa.FindAnnotation[Body](result.Annotations)
 
 `Field`、`Method`、`Parameter` 和 `Result` 返回对应的元数据，以及表示它是否存在的布尔值。`FindAnnotation` 返回指定 Go 类型的第一个注解。`AllAnnotations` 按声明顺序返回全部匹配注解。
 
+### 不知道名称时遍历元数据
+
+框架通常无法预先知道字段名和方法名。`Range` 系列方法可以按稳定顺序遍历各层元数据：
+
+```go
+metadata.RangeFields(func(field *gometa.FieldMetadata) bool {
+	for _, annotation := range field.Annotations {
+		// 处理每个字段注解。
+	}
+	return true
+})
+
+metadata.RangeMethods(func(method *gometa.MethodMetadata) bool {
+	method.RangeParameters(func(parameter *gometa.ParameterMetadata) bool {
+		// 处理 parameter.Annotations。
+		return true
+	})
+
+	method.RangeResults(func(result *gometa.ResultMetadata) bool {
+		// 处理 result.Annotations。
+		return true
+	})
+	return true
+})
+```
+
+字段和方法按名称升序遍历。参数和返回值按下标升序遍历。回调返回 `false` 时，当前遍历立即停止。
+
+使用 `Walk` 可以遍历完整的声明树：
+
+```go
+gometa.Walk(metadata, func(declaration gometa.Declaration) bool {
+	switch declaration.Target {
+	case gometa.TargetType:
+		// declaration.Type
+	case gometa.TargetField:
+		// declaration.Field
+	case gometa.TargetMethod:
+		// declaration.Method
+	case gometa.TargetParameter:
+		// declaration.Method 是所属方法。
+		// declaration.Parameter 是当前入参。
+	case gometa.TargetResult:
+		// declaration.Method 是所属方法。
+		// declaration.Result 是当前出参。
+	}
+
+	name := declaration.Name()
+	index, hasIndex := declaration.Index()
+	annotations := declaration.Annotations()
+	_, _, _, _ = name, index, hasIndex, annotations
+	return true
+})
+```
+
+`Walk` 先访问类型，再访问字段和方法。每个方法后面紧跟它的入参和出参。回调返回 `false` 时，整次遍历立即停止。
+
+如果框架只关心注解，可以使用 `WalkAnnotations` 省去一层注解循环：
+
+```go
+gometa.WalkAnnotations(
+	metadata,
+	func(declaration gometa.Declaration, annotation gometa.Annotation) bool {
+		// 根据注解的具体 Go 类型分发处理。
+		switch value := annotation.(type) {
+		case GET:
+			registerRoute(declaration.Method.Name, value.Path)
+		case Path:
+			index, _ := declaration.Index()
+			registerPathParameter(declaration.Method.Name, index, value.Name)
+		}
+		return true
+	},
+)
+```
+
 ## 非法元数据会立即失败
 
 静态元数据声明不合法时，构造器会抛出 `*gometa.DefinitionError`。以下情况都会失败：
@@ -250,4 +327,3 @@ go vet -vettool="$(command -v gometa)" ./...
 ```bash
 go run ./examples/http
 ```
-

@@ -13,6 +13,7 @@ It does not parse string tags or generate code. It also avoids reflection at run
 - Annotation target validation.
 - Zero-based parameter and result identity.
 - Single and repeated annotation lookup.
+- Deterministic traversal without knowing declaration names.
 - No runtime reflection or code generation.
 - Static validation of declaration bindings.
 
@@ -201,6 +202,82 @@ body, found := gometa.FindAnnotation[Body](result.Annotations)
 
 `Field`, `Method`, `Parameter`, and `Result` return the requested metadata and a boolean indicating whether it exists. `FindAnnotation` returns the first annotation with the requested Go type. `AllAnnotations` returns every matching annotation in declaration order.
 
+### Traverse metadata without names
+
+Frameworks often do not know field or method names in advance. The `Range` methods expose deterministic traversal without requiring those names:
+
+```go
+metadata.RangeFields(func(field *gometa.FieldMetadata) bool {
+	for _, annotation := range field.Annotations {
+		// Process each field annotation.
+	}
+	return true
+})
+
+metadata.RangeMethods(func(method *gometa.MethodMetadata) bool {
+	method.RangeParameters(func(parameter *gometa.ParameterMetadata) bool {
+		// Process parameter.Annotations.
+		return true
+	})
+
+	method.RangeResults(func(result *gometa.ResultMetadata) bool {
+		// Process result.Annotations.
+		return true
+	})
+	return true
+})
+```
+
+Fields and methods are visited in ascending name order. Parameters and results are visited in ascending index order. Returning `false` from a callback stops that traversal.
+
+Use `Walk` to traverse the complete declaration tree:
+
+```go
+gometa.Walk(metadata, func(declaration gometa.Declaration) bool {
+	switch declaration.Target {
+	case gometa.TargetType:
+		// declaration.Type
+	case gometa.TargetField:
+		// declaration.Field
+	case gometa.TargetMethod:
+		// declaration.Method
+	case gometa.TargetParameter:
+		// declaration.Method is the parent method.
+		// declaration.Parameter is the current parameter.
+	case gometa.TargetResult:
+		// declaration.Method is the parent method.
+		// declaration.Result is the current result.
+	}
+
+	name := declaration.Name()
+	index, hasIndex := declaration.Index()
+	annotations := declaration.Annotations()
+	_, _, _, _ = name, index, hasIndex, annotations
+	return true
+})
+```
+
+`Walk` visits the type first, then fields, then methods. Every method is followed by its parameters and results. Returning `false` stops the complete walk.
+
+If a framework only needs annotations, `WalkAnnotations` removes the extra annotation loop:
+
+```go
+gometa.WalkAnnotations(
+	metadata,
+	func(declaration gometa.Declaration, annotation gometa.Annotation) bool {
+		// Dispatch on annotation's dynamic Go type.
+		switch value := annotation.(type) {
+		case GET:
+			registerRoute(declaration.Method.Name, value.Path)
+		case Path:
+			index, _ := declaration.Index()
+			registerPathParameter(declaration.Method.Name, index, value.Name)
+		}
+		return true
+	},
+)
+```
+
 ## Invalid metadata fails immediately
 
 The builders panic with `*gometa.DefinitionError` when a static metadata declaration is invalid. Invalid cases include:
@@ -250,4 +327,3 @@ A complete HTTP-style example is available in [`examples/http`](examples/http):
 ```bash
 go run ./examples/http
 ```
-
