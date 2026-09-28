@@ -79,24 +79,26 @@ func (*UserService) GetUser(id int64, authorization string) (User, error) {
 	return User{ID: id, Name: authorization}, nil
 }
 
-var userServiceMetadata = gometa.Register[UserService](
-	Service{Name: "users"},
-	Deprecated{Message: "use UserServiceV2 for new integrations"},
-	gometa.Field(
-		"BaseURL",
-		Inject{Name: "USER_SERVICE_BASE_URL"},
-	),
-	gometa.Method(
-		"GetUser",
-		GET{Path: "/users/:id"},
-		Permission{Name: "user.read"},
-		Permission{Name: "audit.read"},
-		gometa.NamedParam(0, "id", Path{Name: "id"}),
-		gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
-		gometa.NamedResult(0, "user", Body{}),
-		gometa.NamedResult(1, "err", Failure{}),
-	),
-)
+func init() {
+	gometa.Register[UserService](
+		Service{Name: "users"},
+		Deprecated{Message: "use UserServiceV2 for new integrations"},
+		gometa.Field(
+			"BaseURL",
+			Inject{Name: "USER_SERVICE_BASE_URL"},
+		),
+		gometa.Method(
+			"GetUser",
+			GET{Path: "/users/:id"},
+			Permission{Name: "user.read"},
+			Permission{Name: "audit.read"},
+			gometa.NamedParam(0, "id", Path{Name: "id"}),
+			gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
+			gometa.NamedResult(0, "user", Body{}),
+			gometa.NamedResult(1, "err", Failure{}),
+		),
+	)
+}
 
 func main() {
 	metadata, ok := gometa.MetadataOf[UserService]()

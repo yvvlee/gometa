@@ -8,7 +8,9 @@ type Service struct {
 
 func (*Service) Get(id int64) (string, error) { return "", nil }
 
-var _ = gometa.Register[Service](
-	gometa.Field("ID"),
-	gometa.Method("Get", gometa.Param(0), gometa.Result(0), gometa.Result(1)),
-)
+func init() {
+	gometa.Register[Service](
+		gometa.Field("ID"),
+		gometa.Method("Get", gometa.Param(0), gometa.Result(0), gometa.Result(1)),
+	)
+}

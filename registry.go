@@ -24,8 +24,8 @@ var defaultRegistry = registry{entries: make(map[reflect.Type]Registration)}
 // Register builds metadata for T, validates its bindings with reflection, and
 // adds it to the process-wide registry. Register panics on duplicate or invalid
 // declarations because registration happens during application initialization.
-func Register[T any](parts ...any) *TypeMetadata {
-	return defaultRegistry.register(reflect.TypeFor[T](), parts...)
+func Register[T any](parts ...any) {
+	defaultRegistry.register(reflect.TypeFor[T](), parts...)
 }
 
 // MetadataOf returns metadata registered for the exact type T.

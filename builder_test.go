@@ -34,16 +34,18 @@ type Service struct {
 
 func (Service) Get(int64) (string, error) { return "", nil }
 
-var serviceMetadata = gometa.Register[Service](
-	Deprecated{},
-	gometa.Field("ID", Column{Name: "id"}),
-	gometa.Method(
-		"Get",
-		GET{Path: "/users/:id"},
-		gometa.NamedParam(0, "id", Path{Name: "id"}),
-		gometa.Result(0, Body{}),
-	),
-)
+func init() {
+	gometa.Register[Service](
+		Deprecated{},
+		gometa.Field("ID", Column{Name: "id"}),
+		gometa.Method(
+			"Get",
+			GET{Path: "/users/:id"},
+			gometa.NamedParam(0, "id", Path{Name: "id"}),
+			gometa.Result(0, Body{}),
+		),
+	)
+}
 
 func TestBuildAndLookup(t *testing.T) {
 	metadata, ok := gometa.MetadataOf[Service]()

@@ -244,34 +244,36 @@ func (*UserService) GetUser(id int64, authorization string) (User, error) {
 	return User{ID: id, Name: authorization}, nil
 }
 
-// Assign to a package-level variable to execute during package init.
-var userServiceMetadata = gometa.Register[UserService](
-	// 1. Type annotations
-	Service{Name: "users"},
-	Deprecated{Message: "Use UserServiceV2 for new integrations"},
+// Register inside an init() function during package initialization.
+func init() {
+	gometa.Register[UserService](
+		// 1. Type annotations
+		Service{Name: "users"},
+		Deprecated{Message: "Use UserServiceV2 for new integrations"},
 
-	// 2. Field metadata and annotations
-	gometa.Field(
-		"BaseURL",
-		Inject{Name: "USER_SERVICE_BASE_URL"},
-	),
+		// 2. Field metadata and annotations
+		gometa.Field(
+			"BaseURL",
+			Inject{Name: "USER_SERVICE_BASE_URL"},
+		),
 
-	// 3. Method, parameter, and result metadata
-	gometa.Method(
-		"GetUser",
-		GET{Path: "/users/:id"},
-		Permission{Name: "user.read"},
-		Permission{Name: "audit.read"}, // Repeated annotations
+		// 3. Method, parameter, and result metadata
+		gometa.Method(
+			"GetUser",
+			GET{Path: "/users/:id"},
+			Permission{Name: "user.read"},
+			Permission{Name: "audit.read"}, // Repeated annotations
 
-		// Zero-based parameter indexes with optional descriptive names
-		gometa.NamedParam(0, "id", Path{Name: "id"}),
-		gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
+			// Zero-based parameter indexes with optional descriptive names
+			gometa.NamedParam(0, "id", Path{Name: "id"}),
+			gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
 
-		// Zero-based result indexes
-		gometa.NamedResult(0, "user", Body{}),
-		gometa.NamedResult(1, "err"),
-	),
-)
+			// Zero-based result indexes
+			gometa.NamedResult(0, "user", Body{}),
+			gometa.NamedResult(1, "err"),
+		),
+	)
+}
 ```
 
 > **Note**: For index-only parameters and results without descriptive names, use `Param` and `Result`:
@@ -502,7 +504,7 @@ Invalid static metadata is treated as a programming bug rather than a recoverabl
 | | `(t Target) Valid() bool` | Checks if target mask is non-empty and valid |
 | | `(t Target) String() string` | Returns formatted string (e.g. `"field\|parameter"`) |
 | **Interface** | `Annotation` | Core interface required for annotations: `Targets() Target` |
-| **Registry** | `Register[T](parts ...any) *TypeMetadata` | Builds, validates via reflection, and registers metadata |
+| **Registry** | `Register[T](parts ...any)` | Validates via reflection and registers metadata in global registry (call in `init()`) |
 | | `MetadataOf[T]() (*TypeMetadata, bool)` | Retrieves registered metadata for type `T` |
 | | `Registrations() []Registration` | Returns all registrations sorted by type name |
 | **Builders** | `Field(name, ...Annotation) FieldMetadata` | Constructs field metadata |
@@ -524,8 +526,10 @@ Invalid static metadata is treated as a programming bug rather than a recoverabl
 
 ## Best Practices & Performance
 
-1. **Registration Lifecycle**:
-   Assign `gometa.Register[T](...)` to package-level variables (`var _ = gometa.Register[...]` or `var serviceMeta = gometa.Register[...]`). This executes validation during package initialization and guarantees that all metadata is verified before application serving starts.
+1. **Registration Pattern & Decoupling**:
+   - Strongly recommend registering metadata inside `func init() { gometa.Register[T](...) }`, which aligns with standard Go driver/component registration patterns.
+   - `Register[T]` is purely a registration function and returns no value. Direct variable binding at the declaration site is discouraged to avoid tight coupling.
+   - All consumers (whether within the declaring package or external frameworks) retrieve metadata through the standard entrypoints [`gometa.MetadataOf[T]()`](file:///Users/mshadow/go/src/github.com/yvvlee/gometa/registry.go#L32) or [`gometa.Registrations()`](file:///Users/mshadow/go/src/github.com/yvvlee/gometa/registry.go#L37).
 2. **Pointer and Value Receivers**:
    `gometa.Register[T]` automatically checks the method set of both the value type and its pointer (`*T`). Methods with pointer receivers are fully supported whether `T` or `*T` is registered.
 3. **Concurrency and Runtime Overhead**:

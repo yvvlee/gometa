@@ -241,34 +241,36 @@ func (*UserService) GetUser(id int64, authorization string) (User, error) {
 	return User{ID: id, Name: authorization}, nil
 }
 
-// 建议使用包级变量注册，在 package 初始化时自动执行校验
-var userServiceMetadata = gometa.Register[UserService](
-	// 1. 类型级注解
-	Service{Name: "users"},
-	Deprecated{Message: "推荐使用 UserServiceV2"},
+// 推荐在 init() 函数中注册，在包初始化时自动完成校验并加入全局注册表
+func init() {
+	gometa.Register[UserService](
+		// 1. 类型级注解
+		Service{Name: "users"},
+		Deprecated{Message: "推荐使用 UserServiceV2"},
 
-	// 2. 字段级注解与元数据
-	gometa.Field(
-		"BaseURL",
-		Inject{Name: "USER_SERVICE_BASE_URL"},
-	),
+		// 2. 字段级注解与元数据
+		gometa.Field(
+			"BaseURL",
+			Inject{Name: "USER_SERVICE_BASE_URL"},
+		),
 
-	// 3. 方法级注解及参数/返回值元数据
-	gometa.Method(
-		"GetUser",
-		GET{Path: "/users/:id"},
-		Permission{Name: "user.read"},
-		Permission{Name: "audit.read"}, // 支持同类型重复注解
+		// 3. 方法级注解及参数/返回值元数据
+		gometa.Method(
+			"GetUser",
+			GET{Path: "/users/:id"},
+			Permission{Name: "user.read"},
+			Permission{Name: "audit.read"}, // 支持同类型重复注解
 
-		// 入参元数据：使用下标 (0, 1) 唯一定位，可附加可读性名称
-		gometa.NamedParam(0, "id", Path{Name: "id"}),
-		gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
+			// 入参元数据：使用下标 (0, 1) 唯一定位，可附加可读性名称
+			gometa.NamedParam(0, "id", Path{Name: "id"}),
+			gometa.NamedParam(1, "authorization", Header{Name: "Authorization"}),
 
-		// 出参元数据
-		gometa.NamedResult(0, "user", Body{}),
-		gometa.NamedResult(1, "err"),
-	),
-)
+			// 出参元数据
+			gometa.NamedResult(0, "user", Body{}),
+			gometa.NamedResult(1, "err"),
+		),
+	)
+}
 ```
 
 > **提示**：若不需要显式参数名称，可以直接使用匿名下标辅助函数：
@@ -501,7 +503,7 @@ jobs:
 | | `(t Target) Valid() bool` | 判断目标掩码是否合法非空 |
 | | `(t Target) String() string` | 格式化目标名称（如 `"field\|parameter"`） |
 | **接口定义** | `Annotation` | 注解必须实现的接口：`Targets() Target` |
-| **注册与获取** | `Register[T](parts ...any) *TypeMetadata` | 校验并注册类型 `T` 的元数据（启动期调用） |
+| **注册与获取** | `Register[T](parts ...any)` | 校验并注册类型 `T` 的元数据到全局注册表（在 `init()` 中调用） |
 | | `MetadataOf[T]() (*TypeMetadata, bool)` | 查询类型 `T` 已注册的元数据 |
 | | `Registrations() []Registration` | 获取全局所有已注册项（按类型名升序排列） |
 | **元数据构造** | `Field(name, ...Annotation) FieldMetadata` | 构造字段元数据 |
@@ -523,8 +525,10 @@ jobs:
 
 ## 最佳实践与性能考虑
 
-1. **注册时机**：
-   建议将 `gometa.Register[T](...)` 赋值给包级变量（如 `var _ = gometa.Register[...]` 或 `var userMeta = gometa.Register[...]`）。这样可以保证元数据在 `init()` 阶段一次性构建与校验完成，并利用编译器保证顺序。
+1. **注册范式与职责解耦**：
+   - 强烈推荐在 `func init() { gometa.Register[T](...) }` 中完成元数据注册，符合 Go 标准库驱动/组件注册的标准模式；
+   - `Register[T]` 专注于全局登记，不返回元数据对象。我们**不建议**在声明处直接持有元数据引用，以避免产生紧耦合；
+   - 无论是当前包还是外部框架，所有消费者均通过统一的标准入口 [`gometa.MetadataOf[T]()`](file:///Users/mshadow/go/src/github.com/yvvlee/gometa/registry.go#L32) 或 [`gometa.Registrations()`](file:///Users/mshadow/go/src/github.com/yvvlee/gometa/registry.go#L37) 查询与读取，确保架构一致性。
 2. **指针与值接收者方法**：
    `gometa.Register[T]` 在反射校验时会自动检查值类型及其指针类型（`*T`）上的方法集。因此无论目标方法是值接收者还是指针接收者，均可正常校验与绑定。
 3. **并发安全与运行时开销**：

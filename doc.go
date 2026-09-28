@@ -36,18 +36,20 @@
 //
 // # Registering Metadata
 //
-// Register metadata for a type during package initialization:
+// Register metadata for a type inside a package's init function:
 //
-//	var _ = gometa.Register[UserService](
-//		Service{Name: "users"},
-//		gometa.Field("BaseURL", Inject{Name: "USER_SERVICE_URL"}),
-//		gometa.Method("GetUser",
-//			GET{Path: "/users/:id"},
-//			gometa.NamedParam(0, "id", Path{Name: "id"}),
-//			gometa.NamedResult(0, "user", Body{}),
-//			gometa.NamedResult(1, "err"),
-//		),
-//	)
+//	func init() {
+//		gometa.Register[UserService](
+//			Service{Name: "users"},
+//			gometa.Field("BaseURL", Inject{Name: "USER_SERVICE_URL"}),
+//			gometa.Method("GetUser",
+//				GET{Path: "/users/:id"},
+//				gometa.NamedParam(0, "id", Path{Name: "id"}),
+//				gometa.NamedResult(0, "user", Body{}),
+//				gometa.NamedResult(1, "err"),
+//			),
+//		)
+//	}
 //
 // # Querying Metadata
 //
