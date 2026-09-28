@@ -8,9 +8,7 @@ type Service struct {
 
 func (*Service) Get(id int64) (string, error) { return "", nil }
 
-func (Service) Metadata() *gometa.TypeMetadata {
-	return gometa.TypeOf[Service](
-		gometa.Field("ID"),
-		gometa.Method("Get", gometa.Param(0), gometa.Result(0), gometa.Result(1)),
-	)
-}
+var _ = gometa.Register[Service](
+	gometa.Field("ID"),
+	gometa.Method("Get", gometa.Param(0), gometa.Result(0), gometa.Result(1)),
+)

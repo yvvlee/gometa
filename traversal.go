@@ -48,7 +48,7 @@ func (d Declaration) Annotations() []Annotation {
 }
 
 // Name returns the field, method, parameter, or result name. Type declarations
-// have no runtime name because TypeOf deliberately avoids reflection.
+// have no runtime name because registered metadata does not retain it.
 func (d Declaration) Name() string {
 	switch d.Target {
 	case TargetField:

@@ -79,7 +79,7 @@ func (*UserService) GetUser(id int64, authorization string) (User, error) {
 	return User{ID: id, Name: authorization}, nil
 }
 
-var userServiceMetadata = gometa.TypeOf[UserService](
+var userServiceMetadata = gometa.Register[UserService](
 	Service{Name: "users"},
 	Deprecated{Message: "use UserServiceV2 for new integrations"},
 	gometa.Field(
@@ -98,15 +98,11 @@ var userServiceMetadata = gometa.TypeOf[UserService](
 	),
 )
 
-func (UserService) Metadata() *gometa.TypeMetadata {
-	return userServiceMetadata
-}
-
-var _ gometa.MetadataProvider = UserService{}
-
 func main() {
-	provider := any(UserService{}).(gometa.MetadataProvider)
-	metadata := provider.Metadata()
+	metadata, ok := gometa.MetadataOf[UserService]()
+	if !ok {
+		panic("UserService metadata is not registered")
+	}
 
 	service, _ := gometa.FindAnnotation[Service](metadata.Annotations)
 	deprecated, _ := gometa.FindAnnotation[Deprecated](metadata.Annotations)

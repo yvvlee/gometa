@@ -11,7 +11,7 @@ import (
 
 const gometaPackagePath = "github.com/yvvlee/gometa"
 
-// Analyzer checks that metadata built with TypeOf refers to real fields,
+// Analyzer checks that metadata registered with Register refers to real fields,
 // methods, parameters, and results.
 var Analyzer = &analysis.Analyzer{
 	Name: "gometa",
@@ -24,53 +24,41 @@ func run(pass *analysis.Pass) (any, error) {
 		for _, declaration := range file.Decls {
 			switch value := declaration.(type) {
 			case *ast.FuncDecl:
-				var receiver *types.Named
-				if value.Name.Name == "Metadata" {
-					receiver = receiverType(pass, value)
-				}
-				inspect(pass, value.Body, receiver)
+				inspect(pass, value.Body)
 			case *ast.GenDecl:
-				inspect(pass, value, nil)
+				inspect(pass, value)
 			}
 		}
 	}
 	return nil, nil
 }
 
-func inspect(pass *analysis.Pass, node ast.Node, receiver *types.Named) {
+func inspect(pass *analysis.Pass, node ast.Node) {
 	if node == nil {
 		return
 	}
 	ast.Inspect(node, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
-		if !ok || !isGometaCall(pass, call, "TypeOf") {
+		if !ok || !isGometaCall(pass, call, "Register") {
 			return true
 		}
-		checkTypeOf(pass, call, receiver)
+		checkRegister(pass, call)
 		return true
 	})
 }
 
-func checkTypeOf(pass *analysis.Pass, call *ast.CallExpr, receiver *types.Named) {
+func checkRegister(pass *analysis.Pass, call *ast.CallExpr) {
 	identifier := calledIdentifier(call.Fun)
 	instance, ok := pass.TypesInfo.Instances[identifier]
 	if !ok || instance.TypeArgs.Len() != 1 {
-		pass.Reportf(call.Fun.Pos(), "cannot resolve gometa.TypeOf type argument")
+		pass.Reportf(call.Fun.Pos(), "cannot resolve gometa.Register type argument")
 		return
 	}
 
 	target := namedType(instance.TypeArgs.At(0))
 	if target == nil {
-		pass.Reportf(call.Fun.Pos(), "gometa.TypeOf target must be a named Go type")
+		pass.Reportf(call.Fun.Pos(), "gometa.Register target must be a named Go type")
 		return
-	}
-	if receiver != nil && !types.Identical(receiver, target) {
-		pass.Reportf(
-			call.Fun.Pos(),
-			"gometa.TypeOf target %s does not match Metadata receiver %s",
-			typeName(target),
-			typeName(receiver),
-		)
 	}
 
 	fields := make(map[string]ast.Expr)
@@ -166,13 +154,6 @@ func checkMethodParts(pass *analysis.Pass, target *types.Named, methodName strin
 			}
 		}
 	}
-}
-
-func receiverType(pass *analysis.Pass, declaration *ast.FuncDecl) *types.Named {
-	if declaration.Recv == nil || len(declaration.Recv.List) != 1 {
-		return nil
-	}
-	return namedType(pass.TypesInfo.TypeOf(declaration.Recv.List[0].Type))
 }
 
 func namedType(value types.Type) *types.Named {

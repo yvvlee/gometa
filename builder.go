@@ -2,6 +2,7 @@ package gometa
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 )
 
@@ -20,11 +21,7 @@ func (e *DefinitionError) Error() string {
 	return "gometa: " + e.Path + ": " + e.Message
 }
 
-// TypeOf builds metadata for T. Its arguments may be type annotations,
-// FieldMetadata values returned by Field, and MethodMetadata values returned by
-// Method. T is intentionally not inspected at runtime; use the gometa analyzer
-// to validate the binding to the actual Go type.
-func TypeOf[T any](parts ...any) *TypeMetadata {
+func buildMetadata(parts ...any) *TypeMetadata {
 	metadata := &TypeMetadata{
 		Fields:  make(map[string]*FieldMetadata),
 		Methods: make(map[string]*MethodMetadata),
@@ -55,6 +52,73 @@ func TypeOf[T any](parts ...any) *TypeMetadata {
 		}
 	}
 	return metadata
+}
+
+func validateMetadata(target reflect.Type, metadata *TypeMetadata) {
+	declaration := dereference(target)
+	if declaration.Name() == "" {
+		definitionPanic("type", fmt.Sprintf("target %s must be a named Go type", target))
+	}
+
+	for name := range metadata.Fields {
+		if !hasDirectField(declaration, name) {
+			definitionPanic("field "+name, fmt.Sprintf("unknown field %s.%s", declaration, name))
+		}
+	}
+
+	for name, method := range metadata.Methods {
+		value, ok := methodByName(declaration, name)
+		if !ok {
+			definitionPanic("method "+name, fmt.Sprintf("unknown or inaccessible method %s.%s", declaration, name))
+		}
+		parameterCount := value.Type.NumIn() - 1
+		for _, parameter := range method.Parameters {
+			if parameter.Index >= parameterCount {
+				definitionPanic(
+					"method "+name,
+					fmt.Sprintf("parameter index %d out of range for %s.%s (%d parameters)", parameter.Index, declaration, name, parameterCount),
+				)
+			}
+		}
+		resultCount := value.Type.NumOut()
+		for _, result := range method.Results {
+			if result.Index >= resultCount {
+				definitionPanic(
+					"method "+name,
+					fmt.Sprintf("result index %d out of range for %s.%s (%d results)", result.Index, declaration, name, resultCount),
+				)
+			}
+		}
+	}
+}
+
+func dereference(value reflect.Type) reflect.Type {
+	for value.Kind() == reflect.Pointer {
+		value = value.Elem()
+	}
+	return value
+}
+
+func hasDirectField(value reflect.Type, name string) bool {
+	if value.Kind() != reflect.Struct {
+		return false
+	}
+	for index := 0; index < value.NumField(); index++ {
+		if value.Field(index).Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func methodByName(value reflect.Type, name string) (reflect.Method, bool) {
+	if method, ok := value.MethodByName(name); ok {
+		return method, true
+	}
+	if value.Kind() != reflect.Interface {
+		return reflect.PointerTo(value).MethodByName(name)
+	}
+	return reflect.Method{}, false
 }
 
 // Field creates metadata for a directly declared struct field.

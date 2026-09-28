@@ -7,11 +7,6 @@ type Annotation interface {
 	Targets() Target
 }
 
-// MetadataProvider exposes all declaration metadata for a Go type.
-type MetadataProvider interface {
-	Metadata() *TypeMetadata
-}
-
 // TypeMetadata describes a type and its fields and methods.
 type TypeMetadata struct {
 	Annotations []Annotation

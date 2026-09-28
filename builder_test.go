@@ -34,7 +34,7 @@ type Service struct {
 
 func (Service) Get(int64) (string, error) { return "", nil }
 
-var serviceMetadata = gometa.TypeOf[Service](
+var serviceMetadata = gometa.Register[Service](
 	Deprecated{},
 	gometa.Field("ID", Column{Name: "id"}),
 	gometa.Method(
@@ -45,12 +45,11 @@ var serviceMetadata = gometa.TypeOf[Service](
 	),
 )
 
-func (Service) Metadata() *gometa.TypeMetadata { return serviceMetadata }
-
-var _ gometa.MetadataProvider = Service{}
-
 func TestBuildAndLookup(t *testing.T) {
-	metadata := Service{}.Metadata()
+	metadata, ok := gometa.MetadataOf[Service]()
+	if !ok {
+		t.Fatal("service metadata is not registered")
+	}
 	if _, ok := gometa.FindAnnotation[Deprecated](metadata.Annotations); !ok {
 		t.Fatal("type annotation not found")
 	}
@@ -75,6 +74,9 @@ func TestBuildAndLookup(t *testing.T) {
 	if _, ok := method.Result(0); !ok {
 		t.Fatal("result metadata not found")
 	}
+	if _, ok := gometa.MetadataOf[*Service](); ok {
+		t.Fatal("pointer type must not resolve metadata registered for Service")
+	}
 }
 
 func TestDefinitionFailures(t *testing.T) {
@@ -91,7 +93,7 @@ func TestDefinitionFailures(t *testing.T) {
 		{
 			name: "duplicate field",
 			build: func() {
-				gometa.TypeOf[Service](
+				gometa.Register[duplicateFieldService](
 					gometa.FieldMetadata{Name: "ID"},
 					gometa.FieldMetadata{Name: "ID"},
 				)
@@ -113,7 +115,7 @@ func TestDefinitionFailures(t *testing.T) {
 		{
 			name: "invalid direct method metadata",
 			build: func() {
-				gometa.TypeOf[Service](gometa.MethodMetadata{
+				gometa.Register[duplicateMethodService](gometa.MethodMetadata{
 					Name: "Get",
 					Parameters: []gometa.ParameterMetadata{
 						{Index: 0},
@@ -140,3 +142,92 @@ func TestDefinitionFailures(t *testing.T) {
 		})
 	}
 }
+
+type duplicateFieldService struct{ ID int64 }
+
+type duplicateMethodService struct{}
+
+func (duplicateMethodService) Get(int64) {}
+
+func TestRegisterValidatesBindings(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func()
+		want  string
+	}{
+		{
+			name: "unknown field",
+			build: func() {
+				gometa.Register[invalidFieldService](gometa.FieldMetadata{Name: "Missing"})
+			},
+			want: "unknown field gometa_test.invalidFieldService.Missing",
+		},
+		{
+			name: "unknown method",
+			build: func() {
+				gometa.Register[invalidMethodService](gometa.MethodMetadata{Name: "Missing"})
+			},
+			want: "unknown or inaccessible method gometa_test.invalidMethodService.Missing",
+		},
+		{
+			name: "parameter out of range",
+			build: func() {
+				gometa.Register[invalidParameterService](gometa.MethodMetadata{
+					Name:       "Get",
+					Parameters: []gometa.ParameterMetadata{{Index: 1}},
+				})
+			},
+			want: "parameter index 1 out of range",
+		},
+		{
+			name: "result out of range",
+			build: func() {
+				gometa.Register[invalidResultService](gometa.MethodMetadata{
+					Name:    "Get",
+					Results: []gometa.ResultMetadata{{Index: 2}},
+				})
+			},
+			want: "result index 2 out of range",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			defer func() {
+				value := recover()
+				if value == nil {
+					t.Fatal("expected panic")
+				}
+				if message := fmt.Sprint(value); !strings.Contains(message, test.want) {
+					t.Fatalf("panic %q does not contain %q", message, test.want)
+				}
+			}()
+			test.build()
+		})
+	}
+}
+
+func TestRegisterRejectsDuplicateType(t *testing.T) {
+	gometa.Register[duplicateRegistrationService]()
+
+	defer func() {
+		value := recover()
+		if value == nil {
+			t.Fatal("expected panic")
+		}
+		if message := fmt.Sprint(value); !strings.Contains(message, "is already registered") {
+			t.Fatalf("panic %q does not report duplicate registration", message)
+		}
+	}()
+
+	gometa.Register[duplicateRegistrationService]()
+}
+
+type invalidFieldService struct{ ID int64 }
+type invalidMethodService struct{}
+type invalidParameterService struct{}
+type invalidResultService struct{}
+type duplicateRegistrationService struct{}
+
+func (invalidParameterService) Get(int64)         {}
+func (invalidResultService) Get() (string, error) { return "", nil }

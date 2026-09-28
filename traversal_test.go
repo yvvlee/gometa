@@ -19,25 +19,23 @@ func (TraversalService) AlphaMethod(first, second int64) (string, error) {
 
 func (TraversalService) ZetaMethod() {}
 
-func traversalMetadata() *gometa.TypeMetadata {
-	return gometa.TypeOf[TraversalService](
-		Deprecated{},
-		gometa.Field("Zeta", Column{Name: "zeta"}),
-		gometa.Field("Alpha", Column{Name: "alpha"}),
-		gometa.Method("ZetaMethod", GET{}),
-		gometa.Method(
-			"AlphaMethod",
-			GET{},
-			gometa.NamedParam(1, "second", Path{Name: "second"}),
-			gometa.NamedParam(0, "first", Path{Name: "first"}),
-			gometa.NamedResult(1, "err"),
-			gometa.NamedResult(0, "value", Body{}),
-		),
-	)
-}
+var traversalMetadata = gometa.Register[TraversalService](
+	Deprecated{},
+	gometa.Field("Zeta", Column{Name: "zeta"}),
+	gometa.Field("Alpha", Column{Name: "alpha"}),
+	gometa.Method("ZetaMethod", GET{}),
+	gometa.Method(
+		"AlphaMethod",
+		GET{},
+		gometa.NamedParam(1, "second", Path{Name: "second"}),
+		gometa.NamedParam(0, "first", Path{Name: "first"}),
+		gometa.NamedResult(1, "err"),
+		gometa.NamedResult(0, "value", Body{}),
+	),
+)
 
 func TestRangeMethodsUseStableOrder(t *testing.T) {
-	metadata := traversalMetadata()
+	metadata := traversalMetadata
 
 	var fields []string
 	metadata.RangeFields(func(field *gometa.FieldMetadata) bool {
@@ -78,7 +76,7 @@ func TestRangeMethodsUseStableOrder(t *testing.T) {
 }
 
 func TestWalkUsesStableTreeOrder(t *testing.T) {
-	metadata := traversalMetadata()
+	metadata := traversalMetadata
 	var visited []string
 
 	gometa.Walk(metadata, func(declaration gometa.Declaration) bool {
@@ -116,7 +114,7 @@ func TestWalkUsesStableTreeOrder(t *testing.T) {
 }
 
 func TestWalkCanStopEarly(t *testing.T) {
-	metadata := traversalMetadata()
+	metadata := traversalMetadata
 	visits := 0
 	gometa.Walk(metadata, func(gometa.Declaration) bool {
 		visits++
@@ -128,7 +126,7 @@ func TestWalkCanStopEarly(t *testing.T) {
 }
 
 func TestWalkAnnotations(t *testing.T) {
-	metadata := traversalMetadata()
+	metadata := traversalMetadata
 	var targets []gometa.Target
 	gometa.WalkAnnotations(metadata, func(declaration gometa.Declaration, _ gometa.Annotation) bool {
 		targets = append(targets, declaration.Target)
